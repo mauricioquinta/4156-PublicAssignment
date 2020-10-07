@@ -20,10 +20,11 @@ public class GameBoard {
    */
   public GameBoard() {
     this.gameStarted = false;
-    this.turn = 1; 
+    this.turn = 2; 
     this.boardState = new char[3][3];
     this.winner = 0;
     this.isDraw = false;
+    
     
   }
   

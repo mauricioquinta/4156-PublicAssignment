@@ -10,7 +10,7 @@ import models.Move;
 import models.Player;
 import org.eclipse.jetty.websocket.api.Session;
 
-class PlayGame {
+public class PlayGame {
 
   private static final int PORT_NUMBER = 8080;
 
@@ -18,11 +18,11 @@ class PlayGame {
   
   public static GameBoard board;
   
-  //Checks if the game is a Draw after a move 
+  //Checks if the game is a draw after a move 
   public static boolean isDraw(GameBoard b) {
     for (char[] r : b.getBoardState()) {
       for (char a  : r) {
-        if (a == 0) {
+        if (a == '\u0000') {
           return false;
         }
       }
@@ -30,7 +30,7 @@ class PlayGame {
     return true;
   }
   
-  //checks if the game is won after a move 
+  //Checks if the game is won after a move 
   public static boolean isWinningMove(GameBoard b) {
     char[][] bs = b.getBoardState();
     if ((bs[0][0] == bs[0][1] && bs[0][1] == bs[0][2] && bs[0][2] != 0)  //ROWS
@@ -51,18 +51,17 @@ class PlayGame {
     return false;
   }
   
-  //checks if move is valid according to board state
+  //Checks if move is valid according to board state
   public static boolean isValidMove(int x, int y, GameBoard b) {
-    //check to see if the move is valid and set variable 
+    //Check to see if the move is valid and set variable 
     if (board.getBoardState()[x][y] != 0) {
       return false;
     } 
     return true;  
   }
 
-  //gets the player from the board acording to their ID = (1||2)
+  //Gets the player from the board acording to their ID = (1||2)
   public static Player getPlayerById(int id, GameBoard b) {
-
     if (id == 1) {
       return b.getP1();
     }
@@ -78,35 +77,48 @@ class PlayGame {
       config.addStaticFiles("/public");
     }).start(PORT_NUMBER);
 
-    // Test Echo Server
-    app.post("/echo", ctx -> {
-      ctx.result(ctx.body());
-    });
 
-    // starts a new game
-    app.get("/newgame", ctx -> {
-      ctx.redirect("/tictactoe.html");
+    app.get("/boardstate", ctx -> {
+      //Change GameBoard object to JSON
+      String jsonBoard = new Gson().toJson(board);
+      
+      //Send result back in JSON format 
+      ctx.result(jsonBoard);
     });
     
-    //adds player 2 and starts game 
+    //Starts a new game
+    app.get("/newgame", ctx -> {
+      
+      //create message to show new game is called/created
+      Message msg = new Message(true, 200, "Game Start");
+      
+      //convert message to JSON; 
+      String jsonMessage = new Gson().toJson(msg);
+      ctx.result(jsonMessage);
+      
+      ctx.redirect("/tictactoe.html");
+      
+    });
+    
+    //Adds player 2 and starts game 
     app.post("/startgame", ctx -> {
       
-      //get the body response ie what symbol of p1 is format type=X
+      //Get the body response ie what symbol of p1 is format type=X
       String response = ctx.body();
       char moveType = response.charAt(response.length() - 1);   //extract type from last char
       
-      //create p1
+      //Create p1
       Player p1 = new Player(1, moveType);
+     
       
-      //create a gameBoard
+      //Create a gameBoard
       board = new GameBoard();
       board.setP1(p1);
-      
-      
-      //change GameBoard object to JSON
+     
+      //Change GameBoard object to JSON
       String jsonBoard = new Gson().toJson(board);
       
-      //send result back in JSON format 
+      //Send result back in JSON format 
       ctx.result(jsonBoard);
       
     });
@@ -128,14 +140,17 @@ class PlayGame {
       //create player two
       Player p2 = new Player(2, moveType);
       board.setP2(p2);
+      board.setTurn(1);
       
       //start game
       board.setGameStarted(true);
       
-      //redirect and update view for users 
+      //create jason oard and send toplayers after redirecting 
       String jsonBoard = new Gson().toJson(board);
+            
       ctx.redirect("/tictactoe.html?p=2");
       sendGameBoardToAllPlayers(jsonBoard);
+      
       
     });
     
@@ -147,7 +162,6 @@ class PlayGame {
       String pidStr = ctx.pathParam("playerId");
       int playerId = Integer.parseInt(pidStr);
       String response = ctx.body();
-      
       //get the x,y coordinates of move values hard coded since response is expected 
       int x = Integer.parseInt(String.valueOf(response.charAt(2)));
       int y = Integer.parseInt(String.valueOf(response.charAt(6)));
@@ -157,39 +171,41 @@ class PlayGame {
       Player p = getPlayerById(playerId, board);
       
       //create move with the information 
-      Move usrMove = new Move(p, x, y);
+      Move usrMove = new Move(p, x, y); 
       Message msg;
       
       
       
-      //case1:game is over and there's a winner or draw 
+      //Case1:game is over and there's a winner or draw 
       if (!board.getGameStarted() && (board.getWinner() != 0 || board.getIsDraw()))  { 
         msg = new Message(false, 345, "you're still here? the game is over.. go home");
       
-        //case2: game has yet to start so no letting them move 
+      //Case2: game has yet to start so no letting them move 
       } else if (!board.getGameStarted()) {  //game has not started
-        msg = new Message(false, 340, "the game has not started, be patient");
+        msg = new Message(false, 340, "The game has not started, be patient.");
         
-      //case6: player is trying to go when not their turn 
+      //Case3: player is trying to go when not their turn 
       } else if ((board.getTurn() != playerId)) { //turn != ID 
-        msg = new Message(false, 9000, "you're power level is not that high, wait your turn");
+        msg = new Message(false, 9000, "Please wait for opposing player to make move.");
         
-      //valid move is made
+      //Case4: valid move is made
       } else if (isValid) { 
-        //change board state
+        //MakeMove ~ change board state using the users move
         board.setBoardState(usrMove);
-        //case3: if this is the winner then set message and end game 
+        
+        //Case 4-1: if this is the winner then set message and end game 
         if (isWinningMove(board)) {
-          msg = new Message(isValid, 101, "You've Totally Won player: " + pidStr);
+          msg = new Message(isValid, 101, "You've Totally Won Player: " + pidStr);
           board.setWinner(playerId);
           board.setGameStarted(false);
           
-          //case:4 there has occurred a tie 
+          //case4.2: there has occurred a tie 
         } else if (isDraw(board)) {
           board.setIsDraw(true);
-          msg = new Message(isValid, 389, "Cats Game; issa tie");
+          board.setGameStarted(false);
+          msg = new Message(isValid, 389, "Cats Game; It is a Tie");
           
-          //case5: this is a valid move with no winner 
+          //case 4-3: this is a valid move with no winner 
         } else {
           msg = new Message(isValid, 100, "");
         }
@@ -201,7 +217,7 @@ class PlayGame {
           board.setTurn(1);
         }
         
-      //case6: all good except someone marked there already 
+      //case5: all good except someone marked there already 
       } else {
         msg = new Message(isValid, 270, "Error: move already played");
       }
